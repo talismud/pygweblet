@@ -34,10 +34,11 @@ include = [
 [tool.poetry.dependencies]
 aiohttp = "^3.8"
 aiohttp-session = "^2.11"
+cryptography = "^37.0.2"
 python = ">=3.7"  # Compatible python versions must be declared here
 
 [tool.poetry.dev-dependencies]
-black = "^21.9b0"
+black = "^22.3.0"
 flake8 = "^4.0.1"
 
 [build-system]
