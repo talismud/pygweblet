@@ -29,13 +29,18 @@
 
 """Pygweblet router."""
 
-from types import ModuleType
-from typing import Optional, TYPE_CHECKING
+from inspect import signature
+from typing import Any, Callable, Optional, Type, TYPE_CHECKING
 
 from aiohttp import web
 
+from pygweblet.parameter import RouteParameter
+
 if TYPE_CHECKING:
     from pygweblet.router import PygWebRouter
+
+# Constants
+ACCEPT_POST_DATA = {"POST", "PUT"}
 
 
 class PygWebRoute:
@@ -64,14 +69,60 @@ class PygWebRoute:
         router: "PygWebRouter",
         path: str,
         method: str,
-        program: Optional[ModuleType] = None,
+        program: Optional[Callable] = None,
+        program_class: Optional[Type[Any]] = None,
         template: Optional[str] = None,
     ):
         self.router = router
         self.path = path
         self.method = method
         self.program = program
+        self.program_class = program_class
+        self.program_params = {}
+        self.program_params_kind = set()
         self.template = template
+        if self.program:
+            self._extrapolate_program_params()
+
+    def _extrapolate_program_params(self):
+        """Extrapolate program parameters to be sent to the handler."""
+        parts = self.path.split("/")
+        dynamic_parts = [
+            part[1:-1]
+            for part in parts
+            if part.startswith("{") and part.endswith("}")
+        ]
+        handler = signature(self.program)
+        params = handler.parameters
+        for name, parameter in params.items():
+            if name == "self":
+                if self.program_class is None:
+                    raise ValueError(
+                        f"the route {self.path} has a program {self.program} "
+                        "taking 'self' as argument, but this is not "
+                        "a class program"
+                    )
+
+                kind = RouteParameter.INSTANCE
+            elif name == "request":
+                kind = RouteParameter.REQUEST
+            elif name in dynamic_parts:
+                kind = RouteParameter.DYNAMIC_PART
+            else:
+                if self.method in ACCEPT_POST_DATA:
+                    kind = RouteParameter.QUERY_OR_POST
+                else:
+                    kind = RouteParameter.QUERY
+
+            self.program_params[parameter.name] = kind
+            self.program_params_kind.add(kind)
+
+    @property
+    def __repr__(self):
+        return f"<Route({self.path!r}, method={self.method})>"
+
+    def __str__(self):
+        return f"{self.method} {self.path}"
 
     async def handle(self, request):
         """Handle the request, redirecting to program and template.
@@ -81,6 +132,35 @@ class PygWebRoute:
 
         """
         if self.program:
-            result = await self.program(request)
+            # If needed, create a program class instance.
+            instance = None
+            kwargs = {}
+            if self.program_class:
+                instance = self.program_class()
+                instance.request = request
+
+            # If necessary, load query parameters.
+            info, query, post = {}, {}, {}
+            if RouteParameter.DYNAMIC_PART in self.program_params_kind:
+                info = request.match_info
+            if RouteParameter.QUERY in self.program_params_kind:
+                query = request.query
+            if RouteParameter.QUERY_OR_POST in self.program_params_kind:
+                post = await query.post()
+
+            for name, kind in self.program_params.items():
+                if kind is RouteParameter.INSTANCE:
+                    kwargs[name] = instance
+                elif kind is RouteParameter.DYNAMIC_PART:
+                    kwargs[name] = info.get(name)
+                elif kind is RouteParameter.REQUEST:
+                    kwargs[name] = request
+                elif kind is RouteParameter.QUERY:
+                    kwargs[name] = query.get(name)
+                elif kind is RouteParameter.QUERY_OR_POST:
+                    kwargs[name] = query.get(name) or post.get(name)
+
+            # Execute the handler
+            result = await self.program(**kwargs)
             if isinstance(result, str):
                 return web.Response(text=result, content_type="text/html")

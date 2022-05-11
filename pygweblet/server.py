@@ -94,6 +94,8 @@ class PygWebServer:
 
     def load(self):
         """Load the resources from the file system."""
+        if self._loaded:
+            return
         self.router.load(self.base_dir)
         aio_routes = []
         for route in self.router:
@@ -107,6 +109,7 @@ class PygWebServer:
             aio_routes.append(aio_method(route.path, route.handle))
 
         self.app.add_routes(aio_routes)
+        self._loaded = True
 
     async def _serve(self):
         """Coroutine to start serving."""

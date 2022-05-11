@@ -63,6 +63,20 @@ class PygWebRouter:
         self.server = server
         self._routes = {}
 
+    def __repr__(self):
+        lines = ["<PygWebRouter("]
+        for route in self:
+            lines.append(" " * 4 + repr(route))
+        lines.append(")>")
+        return "\n".join(lines)
+
+    def __str__(self):
+        lines = ["PygWebRouter("]
+        for route in self:
+            lines.append(" " * 4 + str(route))
+        lines.append(")")
+        return "\n".join(lines)
+
     def __iter__(self):
         return iter(self._routes.values())
 
@@ -88,7 +102,6 @@ class PygWebRouter:
 
         """
         for file_path in program_dir.rglob("*.py"):
-
             if file_path.name.startswith("_") or any(
                 path.name.startswith("_") for path in file_path.parents
             ):
@@ -135,16 +148,20 @@ class PygWebRouter:
             path (Path): the path name.
 
         """
-        uri = "/"
+        parts = []
         parent = path.parent.as_posix()
         if parent != ".":
-            uri += parent
+            parts += parent.split("/")
 
         stem = path.stem
         if stem == "index":
-            if uri != "/":
-                uri += "/"
+            parts.append("")
         else:
-            uri += stem
+            parts.append(stem)
 
-        return uri
+        # Replace dynamic URI parts.
+        for i, part in enumerate(parts):
+            if part.startswith("(") and part.endswith(")"):
+                parts[i] = "{" + part[1:-1] + "}"
+
+        return "/" + "/".join(parts)
