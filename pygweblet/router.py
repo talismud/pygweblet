@@ -1,4 +1,4 @@
-# Copyright (c) 2021, LE GOFF Vincent
+# Copyright (c) 2022, LE GOFF Vincent
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,7 @@
 
 """Pygweblet router."""
 
+from operator import attrgetter
 from pathlib import Path
 from types import ModuleType
 from typing import Union, TYPE_CHECKING
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
 
 # Constants
 WEB_METHODS = {"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"}
+WEB_METHODS_TO_ADD = {"GET", "POST"}
 
 
 class PygWebRouter:
@@ -72,7 +74,7 @@ class PygWebRouter:
 
     def __str__(self):
         lines = ["PygWebRouter("]
-        for route in self:
+        for route in sorted(self, key=attrgetter("path", "method")):
             lines.append(" " * 4 + str(route))
         lines.append(")")
         return "\n".join(lines)
@@ -134,11 +136,58 @@ class PygWebRouter:
             handler = getattr(module, method.lower(), None)
             if handler is not None:
                 self._routes[(method, path)] = PygWebRoute(
-                    self, path, method, program=handler
+                    self, path, method, program=handler, program_path=file_path
                 )
 
-    def _load_templates(self, template_path: Path):
-        pass
+    def _load_templates(self, template_dir: Path):
+        """Load all templates from the custom directory.
+
+        Args:
+            template_dir (Path): the directory containing templates.
+
+        """
+        for file_path in template_dir.rglob("*.jj2"):
+            if file_path.name.startswith("_") or any(
+                path.name.startswith("_") for path in file_path.parents
+            ):
+                continue
+
+            template_path = file_path.relative_to(template_dir)
+            file_path = file_path.relative_to(template_dir.parent)
+            path = self._make_path_from(template_path)
+            self._load_template(path, file_path, template_path)
+
+    def _load_template(
+        self, path: str, file_path: Path, relative_path: Path
+    ) -> None:
+        """Load a template, delegating reading it to the temlate loader.
+
+        Args:
+            path (str): the URI's path.
+            file_path (Path): the path to the template file.
+            relative_path (Path): the path relative to the template directory.
+
+        """
+        # If the file's stem is a method name, recalibrate the path.
+        stem = file_path.stem
+        if stem in WEB_METHODS:
+            path = self._make_path_from(relative_path.parent)
+            methods = [stem.upper()]
+        else:
+            methods = tuple(WEB_METHODS_TO_ADD)
+
+        environment = self.server.template_environment
+        for method in methods:
+            # Add this template to the specific method's route,
+            # or create a new route if necessary.
+            route = self._routes.get((method, path))
+            environment.get_template(file_path.as_posix())
+            if route:
+                route.template = file_path.as_posix()
+            else:
+                self._routes[(method, path)] = PygWebRoute(
+                    self, path, method, template=file_path.as_posix()
+                )
 
     @staticmethod
     def _make_path_from(path: Path) -> str:

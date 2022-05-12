@@ -27,17 +27,50 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Route parameters"""
+"""Loader for Jinj12 templates."""
 
-from enum import Enum
+from pathlib import Path
+from typing import Callable, Tuple
+
+from jinja2 import BaseLoader, Environment, TemplateNotFound
 
 
-class RouteParameter(Enum):
+class PygWebTemplateLoader(BaseLoader):
 
-    """Enumeration to describe kinds of route parameters."""
+    """Loader specific to PygWebLet, based on a file-system loader."""
 
-    INSTANCE = "method instance"
-    REQUEST = "request"
-    DYNAMIC_PART = "dynamic part of the URI"
-    QUERY = "query parameters"
-    QUERY_OR_POST = "query parameter or post data"
+    def __init__(self, path: Path):
+        self.path = path
+
+    def get_source(
+        self, environment: Environment, template: str
+    ) -> Tuple[str, str, Callable[[str], bool]]:
+        """Get the compiled template, if found.
+
+        If not found, raise TemplateNotFound exception.
+
+        Args:
+            environment (Environment): the Jinja2 environment.
+            template (str): the template name (or path).
+
+        Returns:
+            content, path, callable (tuple): the content's template as
+                    a string, the path as a string and a callable to check
+                    that the template hasn't been modified.
+
+        Raises:
+            TemplateNotFound if the template isn't found.
+
+        """
+        path = self.path / template
+        if not path.exists():
+            raise TemplateNotFound(template)
+
+        mtime = path.stat().st_mtime
+        with path.open("r", encoding="utf-8") as file:
+            source = file.read()
+
+        def is_modified() -> bool:
+            return mtime == path.stat().st_mtime
+
+        return source, path.as_posix(), is_modified

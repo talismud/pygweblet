@@ -1,4 +1,4 @@
-# Copyright (c) 2021, LE GOFF Vincent
+# Copyright (c) 2022, LE GOFF Vincent
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -34,8 +34,10 @@ from pathlib import Path
 from typing import Union
 
 from aiohttp import web as aioweb
+from jinja2 import Environment
 
 from pygweblet.router import PygWebRouter
+from pygweblet.template_loader import PygWebTemplateLoader
 
 
 class PygWebServer:
@@ -76,6 +78,9 @@ class PygWebServer:
         self.serving_task = None
         self.stop_event = asyncio.Event()
         self.router = PygWebRouter(self)
+        self.template_environment = Environment(
+            enable_async=True, loader=PygWebTemplateLoader(Path(base_dir))
+        )
         self._loaded = False
 
     async def serve(self):
@@ -96,14 +101,15 @@ class PygWebServer:
         """Load the resources from the file system."""
         if self._loaded:
             return
+
         self.router.load(self.base_dir)
         aio_routes = []
         for route in self.router:
-            method = "GET"
-            aio_method = getattr(aioweb, method.lower(), None)
+            aio_method = getattr(aioweb, route.method.lower(), None)
             if aio_method is None:
                 raise ValueError(
-                    f"Method {method} for route {route.path} cannot be found"
+                    f"Method {route.method} for route {route.path} "
+                    "cannot be found"
                 )
 
             aio_routes.append(aio_method(route.path, route.handle))

@@ -1,4 +1,4 @@
-# Copyright (c) 2021, LE GOFF Vincent
+# Copyright (c) 2022, LE GOFF Vincent
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -30,9 +30,11 @@
 """Pygweblet router."""
 
 from inspect import signature
+from pathlib import Path
 from typing import Any, Callable, Optional, Type, TYPE_CHECKING
 
 from aiohttp import web
+from jinja2 import Template
 
 from pygweblet.parameter import RouteParameter
 
@@ -71,13 +73,15 @@ class PygWebRoute:
         method: str,
         program: Optional[Callable] = None,
         program_class: Optional[Type[Any]] = None,
-        template: Optional[str] = None,
+        program_path: Optional[Path] = None,
+        template: Optional[Template] = None,
     ):
         self.router = router
         self.path = path
         self.method = method
         self.program = program
         self.program_class = program_class
+        self.program_path = program_path
         self.program_params = {}
         self.program_params_kind = set()
         self.template = template
@@ -122,7 +126,33 @@ class PygWebRoute:
         return f"<Route({self.path!r}, method={self.method})>"
 
     def __str__(self):
-        return f"{self.method} {self.path}"
+        desc = f"{self.method} {self.path}"
+        params = []
+        if self.program:
+            params.append(f"program={self.program_origin}")
+        if self.template:
+            params.append(f"template={self.template}")
+
+        return f"{desc} ({', '.join(params)})"
+
+    @property
+    def program_origin(self) -> str:
+        """Return the address of the program."""
+        origin = f"file {self.program_path.as_posix()}"
+        callback = "function"
+        if self.program_class:
+            origin += f", class {self.program_class.__name__}"
+            callback = "method"
+
+        if self.program:
+            origin += f", {callback} {self.program.__name__}"
+
+        return origin
+
+    @property
+    def template_environment(self):
+        """Return the template environment of the server."""
+        return self.router.server.template_environment
 
     async def handle(self, request):
         """Handle the request, redirecting to program and template.
@@ -164,3 +194,10 @@ class PygWebRoute:
             result = await self.program(**kwargs)
             if isinstance(result, str):
                 return web.Response(text=result, content_type="text/html")
+
+            if self.template:
+                template = self.template_environment.get_template(
+                    self.template
+                )
+                text = await template.render_async(**result)
+                return web.Response(text=text, content_type="text/html")
