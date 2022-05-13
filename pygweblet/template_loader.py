@@ -30,7 +30,7 @@
 """Loader for Jinj12 templates."""
 
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 from jinja2 import BaseLoader, Environment, TemplateNotFound
 
@@ -44,7 +44,7 @@ class PygWebTemplateLoader(BaseLoader):
 
     def get_source(
         self, environment: Environment, template: str
-    ) -> Tuple[str, str, Callable[[str], bool]]:
+    ) -> Tuple[str, Optional[str], Callable[[], bool]]:
         """Get the compiled template, if found.
 
         If not found, raise TemplateNotFound exception.

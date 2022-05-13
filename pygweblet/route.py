@@ -31,10 +31,9 @@
 
 from inspect import signature
 from pathlib import Path
-from typing import Any, Callable, Optional, Type, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, Set, Type, TYPE_CHECKING
 
 from aiohttp import web
-from jinja2 import Template
 
 from pygweblet.parameter import RouteParameter
 
@@ -74,7 +73,7 @@ class PygWebRoute:
         program: Optional[Callable] = None,
         program_class: Optional[Type[Any]] = None,
         program_path: Optional[Path] = None,
-        template: Optional[Template] = None,
+        template: Optional[str] = None,
     ):
         self.router = router
         self.path = path
@@ -82,8 +81,8 @@ class PygWebRoute:
         self.program = program
         self.program_class = program_class
         self.program_path = program_path
-        self.program_params = {}
-        self.program_params_kind = set()
+        self.program_params: Dict[str, RouteParameter] = {}
+        self.program_params_kind: Set[RouteParameter] = set()
         self.template = template
         if self.program:
             self._extrapolate_program_params()
@@ -138,7 +137,8 @@ class PygWebRoute:
     @property
     def program_origin(self) -> str:
         """Return the address of the program."""
-        origin = f"file {self.program_path.as_posix()}"
+        path = self.program_path and self.program_path.as_posix() or "[...]"
+        origin = f"file {path}"
         callback = "function"
         if self.program_class:
             origin += f", class {self.program_class.__name__}"

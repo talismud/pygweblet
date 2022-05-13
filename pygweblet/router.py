@@ -32,7 +32,7 @@
 from operator import attrgetter
 from pathlib import Path
 from types import ModuleType
-from typing import Union, TYPE_CHECKING
+from typing import Dict, Tuple, Union, TYPE_CHECKING
 
 from pygweblet.route import PygWebRoute
 
@@ -63,7 +63,7 @@ class PygWebRouter:
 
     def __init__(self, server: "PygWebServer"):
         self.server = server
-        self._routes = {}
+        self._routes: Dict[Tuple[str, str], PygWebRoute] = {}
 
     def __repr__(self):
         lines = ["<PygWebRouter("]
@@ -172,7 +172,7 @@ class PygWebRouter:
         stem = file_path.stem
         if stem in WEB_METHODS:
             path = self._make_path_from(relative_path.parent)
-            methods = [stem.upper()]
+            methods: Tuple[str, ...] = (stem.upper(),)
         else:
             methods = tuple(WEB_METHODS_TO_ADD)
 
