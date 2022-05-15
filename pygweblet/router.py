@@ -109,8 +109,8 @@ class PygWebRouter:
             ):
                 continue
 
-            # The path may containg characters that disqualify
-            # it from being a Python module.  So we oen the file
+            # The path may contain characters that disqualify
+            # it from being a Python module.  So we open the file
             # and execute it.
             program_path = file_path.relative_to(program_dir)
             path = self._make_path_from(program_path)

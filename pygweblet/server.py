@@ -33,11 +33,12 @@ import asyncio
 from pathlib import Path
 from typing import Union
 
-from aiohttp import web as aioweb
+from aiohttp import web
 from jinja2 import Environment
 
 from pygweblet.router import PygWebRouter
 from pygweblet.template_loader import PygWebTemplateLoader
+from pygweblet.websocket import PygWebWSRouter
 
 
 class PygWebServer:
@@ -73,11 +74,12 @@ class PygWebServer:
         self.base_dir = base_dir
         self.interface = "127.0.0.1"
         self.port = port
-        self.app = aioweb.Application()
-        self.runner = aioweb.AppRunner(self.app)
+        self.app = web.Application()
+        self.runner = web.AppRunner(self.app)
         self.serving_task = None
         self.stop_event = asyncio.Event()
         self.router = PygWebRouter(self)
+        self.ws_router = PygWebWSRouter(self)
         self.template_environment = Environment(
             enable_async=True, loader=PygWebTemplateLoader(Path(base_dir))
         )
@@ -103,9 +105,10 @@ class PygWebServer:
             return
 
         self.router.load(self.base_dir)
+        self.ws_router.load(self.base_dir)
         aio_routes = []
         for route in self.router:
-            aio_method = getattr(aioweb, route.method.lower(), None)
+            aio_method = getattr(web, route.method.lower(), None)
             if aio_method is None:
                 raise ValueError(
                     f"Method {route.method} for route {route.path} "
@@ -129,6 +132,15 @@ class PygWebServer:
     async def serve_web(self):
         """Asynchronously start the web server."""
         await self.runner.setup()
-        site = aioweb.TCPSite(self.runner, self.interface, self.port)
+        site = web.TCPSite(self.runner, self.interface, self.port)
         await site.start()
         self.serving_task = None
+
+    def add_websocket(self, route: str):
+        """Add a route for a WebSocket endpoint.
+
+        Args:
+            route (str): the route leading to the WebSocket.
+
+        """
+        self.app.add_routes([web.get(route, self.ws_router.handle)])
